@@ -1,0 +1,27 @@
+{
+    "buttons":[
+        "A",
+        "B",
+        "X",
+        "Y",
+        "LB",
+        "RB",
+        "LT",
+        "RT",
+        "Back",
+        "Start",
+        "LStick",
+        "RStick",
+        "Up",
+        "Down",
+        "Left",
+        "Right",
+        "XBox"
+    ],
+    "axes":[
+        "Left Stick Horizontal",
+        "Left Stick Vertical",
+        "Right Stick Horizontal",
+        "Right Stick Vertical"
+    ]
+}

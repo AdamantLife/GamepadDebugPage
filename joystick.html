@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<head>
+    <style>
+        #top{
+            display: flex;
+            float:left;
+            width:100%;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            resize: vertical;
+            overflow-y: scroll;
+        }
+        #top>*{
+            width:50%;
+        }
+
+        #buttons, #axes {
+            position: sticky;
+            top:0;
+        }
+
+        .button, .axis {
+            box-shadow: 6px 6px 5px 0px rgba(0,0,0,0.75);
+            -webkit-box-shadow: 6px 6px 5px 0px rgba(0,0,0,0.75);
+            -moz-box-shadow: 6px 6px 5px 0px rgba(0,0,0,0.75);
+            background-color: blue;
+
+            text-align: center;
+            line-height: 50px;
+            font-weight: bold;
+            color:white;
+        }
+
+        .button{
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-top: 5px;
+            margin-right: 5px;
+        }
+            .button.on{
+                background-color: greenyellow;
+                color:black;
+            }
+
+        .axis{
+            position: relative;
+            height: 50px;
+            width:100%;
+            margin-top: 10px;
+        }
+        .axis>.bar{
+            position: absolute;
+            left:0px;
+            top:0px;
+            height: 50px;
+            background-color: red;
+        }
+        .axis>span{
+            position: relative;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <h2>JOYSTICK: <span id="connection"></span></h2>
+    <div id="top">
+        <div style="text-align: center; width:100%;">
+            <label id="loadgamepadmap"><span style="font-weight: bold;">Current Mapping: </span><input id="mapload" type="file"></button></label>
+        </div>
+        <div>
+            <h3 style="text-align:center; vertical-align:middle;">Buttons</h3>
+            <div id="buttons" style="display:flex; width:50%; flex-wrap: wrap;">
+            </div>
+        </div>
+
+        <div>
+            <h3 style="text-align:center; vertical-align:middle;">Axes</h3>
+            <div id="axes">
+            </div>
+        </div>
+
+    </div>
+    
+    <div style="text-align: center; width:100%;margin-bottom: 5px;;">
+        <label>URL:<input id="iframeurl" type="text"/><button onclick="navWeb();">Go</button></label>
+    </div>
+    <iframe id="testarea" style="width:100%;height:100vh;"></iframe>
+    <script>
+        var CONNECTION = document.getElementById("connection");
+        var GUI_BUTTONS = document.getElementById("buttons");
+        var GUI_AXES = document.getElementById("axes")
+        var GAMEPAD = null;
+        var FRAMERATE = 60;
+        var CALLBACKID;
+
+        function updateConnected(e){
+            console.log(e);
+            if(e.type == "gamepadconnected"){
+                CONNECTION.innerHTML = `Connected [${e.gamepad.id?e.gamepad.id:"Generic Gamepad"}]`;
+                GAMEPAD = e.gamepad.index;
+                createGUI();
+            }else{
+                CONNECTION.innerHTML= "Disconnected";
+                GAMEPAD = null;
+                destroyGUI();
+            }
+        }
+
+        function createGUI(){
+            let gamepad = navigator.getGamepads()[GAMEPAD];
+            for(let button in gamepad.buttons){
+                GUI_BUTTONS.insertAdjacentHTML("beforeend", `<span class="button"></span>`);
+            }
+            for(let axis in gamepad.axes){
+                GUI_AXES.insertAdjacentHTML("beforeend", `<div class="axis"><span></span><div class="bar"></div></div>`);
+            }
+            document.getElementById("loadgamepadmap").style.display = "initial";
+        }
+
+        function destroyGUI(){
+            while(GUI_BUTTONS.lastChild){
+                GUI_BUTTONS.removeChild(GUI_BUTTONS.lastChild);
+            }
+            while(GUI_AXES.lastChild){
+                GUI_AXES.removeChild(GUI_AXES.lastChild)
+            }
+            document.getElementById("loadgamepadmap").style.display = "none";
+        }
+
+        function getLoadGamepadMap(event){
+            let map = event.target.files[0];
+            if(!map) return;
+
+            let reader = new FileReader();
+            reader.onload = (e)=>{
+                content = e.target.result;
+                return loadGamepadMap(content);
+            }
+            reader.readAsText(map);
+        }
+
+        function loadGamepadMap(mapping){
+            mapping = JSON.parse(mapping);
+            let buttons = GUI_BUTTONS.getElementsByClassName("button");
+            let i = 0;
+            for(let button of mapping.buttons){
+                buttons[i].innerText = button;
+                i++;
+            }
+
+            let axes = GUI_AXES.getElementsByClassName("axis");
+            i = 0;
+            for(let axis of mapping.axes){
+                axes[i].firstChild.innerText = axis;
+                i++;
+            }
+        }
+
+        function poll(){
+            if(GAMEPAD === null || GAMEPAD === undefined) return window.requestAnimationFrame(poll);
+            let gamepad = navigator.getGamepads()[GAMEPAD];
+
+            let index = 0;
+            for(let button of GUI_BUTTONS.getElementsByClassName("button")){
+                if(gamepad.buttons[index].value){button.classList.add("on");}
+                else{button.classList.remove("on");}
+                index++;
+            };
+
+            index = 0;
+            for(let axis of GUI_AXES.querySelectorAll(".axis>.bar")){
+                axis.style.width = `${Math.min((gamepad.axes[index]+1)/2*100,100)}%`;
+                index++;
+            };
+            window.requestAnimationFrame(poll);
+        }
+
+        function navWeb(){
+            let url = document.getElementById("iframeurl").value;
+            document.getElementById("testarea").src = url;
+        }
+
+        (()=>{
+            window.addEventListener("gamepadconnected", updateConnected);
+            window.addEventListener("gamepaddisconnected", updateConnected);
+            document.getElementById("iframeurl").addEventListener("keydown", (event)=>{console.log(event);if(event.keyCode == 13){navWeb();event.preventDefault(); event.stopPropagation(); event.target.blur(); return false;}})
+            document.getElementById("mapload").addEventListener("change", getLoadGamepadMap)
+            window.requestAnimationFrame(poll);
+        })();
+    </script>
+</body>
