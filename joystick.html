@@ -66,7 +66,7 @@
     <h2>JOYSTICK: <span id="connection"></span></h2>
     <div id="top">
         <div style="text-align: center; width:100%;">
-            <label id="loadgamepadmap"><span style="font-weight: bold;">Current Mapping: </span><input id="mapload" type="file"></button></label>
+            <label id="loadgamepadmap"><span style="font-weight: bold;">Current Mapping: </span><input id="mapload" type="file" accept="application/json"></button></label>
         </div>
         <div>
             <h3 style="text-align:center; vertical-align:middle;">Buttons</h3>
@@ -87,26 +87,36 @@
     </div>
     <iframe id="testarea" style="width:100%;height:100vh;"></iframe>
     <script>
-        var CONNECTION = document.getElementById("connection");
-        var GUI_BUTTONS = document.getElementById("buttons");
-        var GUI_AXES = document.getElementById("axes")
+        // Variable indicating the presence of a gamepad
         var GAMEPAD = null;
-        var FRAMERATE = 60;
-        var CALLBACKID;
+        // Reference to the div holding the gamepad's button feedback widgets
+        var GUI_BUTTONS = document.getElementById("buttons");
+        // Reference to the div holding the gamepad's axis feedback widgets
+        var GUI_AXES = document.getElementById("axes")
 
+        /**
+         * Updates the gui whenever a Gamepad is connected or disconnected (triggering the respective event).
+         * If controller is connected when the page is loaded, the event may not trigger until the gamepad
+         * is interacted with (button pressed/axis moved).
+         * Currently only supports one gamepad
+         * TODO: update page to support multiple gamepads
+         * @param {Event} e - gamepadconnected or gamepaddisconnected event
+         */
         function updateConnected(e){
-            console.log(e);
             if(e.type == "gamepadconnected"){
-                CONNECTION.innerHTML = `Connected [${e.gamepad.id?e.gamepad.id:"Generic Gamepad"}]`;
+                document.getElementById("connection").innerHTML = `Connected [${e.gamepad.id?e.gamepad.id:"Generic Gamepad"}]`;
                 GAMEPAD = e.gamepad.index;
                 createGUI();
             }else{
-                CONNECTION.innerHTML= "Disconnected";
+                document.getElementById("connection").innerHTML= "Disconnected";
                 GAMEPAD = null;
                 destroyGUI();
             }
         }
 
+        /**
+         * Adds the buttons and axes listed in the Gamepad object to the gui and displays the "load map" button.
+         */
         function createGUI(){
             let gamepad = navigator.getGamepads()[GAMEPAD];
             for(let button in gamepad.buttons){
@@ -118,6 +128,9 @@
             document.getElementById("loadgamepadmap").style.display = "initial";
         }
 
+        /**
+         * Removes all buttons and axes and hides the "load mpa" button
+         */
         function destroyGUI(){
             while(GUI_BUTTONS.lastChild){
                 GUI_BUTTONS.removeChild(GUI_BUTTONS.lastChild);
@@ -128,7 +141,17 @@
             document.getElementById("loadgamepadmap").style.display = "none";
         }
 
+        /**
+         * Callback for the "load map" filepicker button. Reads the file and then loads it via loadGamepadMap(filecontent);
+         * @param {Event} event - The event fired by the input[type=file] button
+         * @returns - null
+         */
         function getLoadGamepadMap(event){
+            if(GAMEPAD === null || GAMEPAD === undefined){
+                window.alert("No Gamepad to Map");
+                document.getElementById("mapload").value = "";
+                return false;
+            }
             let map = event.target.files[0];
             if(!map) return;
 
@@ -140,29 +163,63 @@
             reader.readAsText(map);
         }
 
+        /**
+         * Called by getLoadGamepadMap to parse and update the gamepad mapping. See README for info on mapping.
+         * @param {String} mapping - the content of the chosen file which should be json-parseable.
+         */
         function loadGamepadMap(mapping){
-            mapping = JSON.parse(mapping);
+            try{mapping = JSON.parse(mapping);}
+            catch(e){ window.alert("Failed to load Mapping"); document.getElementById("mapload").value = ""; return false; }
+
             let buttons = GUI_BUTTONS.getElementsByClassName("button");
-            let i = 0;
-            for(let button of mapping.buttons){
-                buttons[i].innerText = button;
-                i++;
-            }
+            // Clear all button labels
+            for(let button of buttons){
+                    button.innerText = "";
+                }
 
             let axes = GUI_AXES.getElementsByClassName("axis");
-            i = 0;
-            for(let axis of mapping.axes){
-                axes[i].firstChild.innerText = axis;
-                i++;
+            // Clear all axe labels
+            for(let axis of axes){
+                    axis.firstChild.innerText = "";
+                }
+
+            if(mapping.buttons !== undefined){
+                let i = 0;
+                for(let button of mapping.buttons){
+                    // In case more buttons are mapped than are available
+                    if(i>=buttons.length) continue;
+                    buttons[i].innerText = button;
+                    i++;
+                }
+            }
+
+            if(mapping.axes !== undefined){
+                let i = 0;
+                for(let axis of mapping.axes){
+                    // In case more axes are mapped than are available
+                    if(i>=axes.length) continue;
+                    axes[i].firstChild.innerText = axis;
+                    i++;
+                }
             }
         }
 
+        /**
+         * Updates the current state of the gamepad (button presses and axis values)
+         * @returns CallbackID for the next requested Animation Frame
+         */
         function poll(){
+            // Check for GAMEPAD first
+            // If no gamepad, queue the next requestAnimationFrame callback
             if(GAMEPAD === null || GAMEPAD === undefined) return window.requestAnimationFrame(poll);
+
+            // Get current state of Gamepad (GAMEPAD is the index/id of the gamepad)
             let gamepad = navigator.getGamepads()[GAMEPAD];
 
             let index = 0;
             for(let button of GUI_BUTTONS.getElementsByClassName("button")){
+                // Iterate through all gui buttons and crossreference their index with the gamepad Object's buttons
+                // Modify the css class based on whether the button is pressed or not
                 if(gamepad.buttons[index].value){button.classList.add("on");}
                 else{button.classList.remove("on");}
                 index++;
@@ -170,21 +227,37 @@
 
             index = 0;
             for(let axis of GUI_AXES.querySelectorAll(".axis>.bar")){
+                // Iterate through all the gui axes'
+                // Set each axis' bar to be a percentage width based on its value
+                // Value is [-1...+1] inclusive, and is mapped between 0% (-1) and 100%(+1)
+                // Zero is neutral (no bias in either direction)
                 axis.style.width = `${Math.min((gamepad.axes[index]+1)/2*100,100)}%`;
                 index++;
             };
+            // Queue the next requestAnimationFrame callback
             window.requestAnimationFrame(poll);
         }
 
+        /**
+         * Loads the url/filename proved in the iframeurl input into the iframe
+         */
         function navWeb(){
             let url = document.getElementById("iframeurl").value;
             document.getElementById("testarea").src = url;
         }
 
-        (()=>{
+        (
+            /**
+             * Sets up listeners:
+             *   * gamepadconnected/disconnected
+             *   * iframeurl to enable submit-via-return key
+             *   * callback for the filepicker (input[type=file]) to load gamepad mapping files
+             * Begins the polling callback for updating the gui with the gamepad inputs via the poll() function
+             */
+            ()=>{
             window.addEventListener("gamepadconnected", updateConnected);
             window.addEventListener("gamepaddisconnected", updateConnected);
-            document.getElementById("iframeurl").addEventListener("keydown", (event)=>{console.log(event);if(event.keyCode == 13){navWeb();event.preventDefault(); event.stopPropagation(); event.target.blur(); return false;}})
+            document.getElementById("iframeurl").addEventListener("keydown", (event)=>{if(event.keyCode == 13){navWeb();event.preventDefault(); event.stopPropagation(); event.target.blur(); return false;}})
             document.getElementById("mapload").addEventListener("change", getLoadGamepadMap)
             window.requestAnimationFrame(poll);
         })();
